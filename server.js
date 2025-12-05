@@ -18,11 +18,9 @@ const CONFIG = {
 async function generateKeyAuthLicense(productConfig) {
   try {
     const url = `https://keyauth.win/api/seller/?sellerkey=${CONFIG.KEYAUTH_SELLER_KEY}&type=add&expiry=${productConfig.expiry}&mask=******-******-******-******&level=${productConfig.level}&amount=1&format=json`;
-    
     console.log('🔑 Calling KeyAuth API...');
     const response = await axios.get(url);
     console.log('🔑 KeyAuth response:', JSON.stringify(response.data));
-    
     if (response.data.success) {
       const key = response.data.key || response.data.keys?.[0] || response.data.keys;
       console.log('✅ Generated KeyAuth license:', key);
@@ -43,7 +41,83 @@ async function sendLicenseEmail(email, customerName, licenseKey, productName) {
       from: CONFIG.EMAIL_FROM,
       to: email,
       subject: `🎮 Your ${productName} License Key`,
-      html: `<!DOCTYPE html><html><head><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#0a0a0f;color:#fff;margin:0;padding:20px}.container{max-width:600px;margin:0 auto;background:linear-gradient(135deg,#12121a 0%,#1a1a2e 100%);border-radius:16px;padding:40px;border:1px solid #2a2a3e}.logo{text-align:center;margin-bottom:30px}.logo img{width:80px;height:80px}h1{color:#00aeff;text-align:center;margin-bottom:10px;font-size:28px}.subtitle{color:#888;text-align:center;margin-bottom:30px}.license-box{background:#0a0a12;border:2px solid #00aeff;border-radius:12px;padding:20px;text-align:center;margin:30px 0}.license-label{color:#888;font-size:12px;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px}.license-key{font-family:'Consolas',monospace;font-size:24px;color:#00aeff;letter-spacing:2px;word-break:break-all}.instructions{background:#1a1a2e;border-radius:8px;padding:20px;margin-top:30px}.instructions h3{color:#00aeff;margin-top:0}.instructions ol{color:#ccc;line-height:1.8}.footer{text-align:center;margin-top:30px;color:#666;font-size:12px}</style></head><body><div class="container"><div class="logo"><img src="https://i.imgur.com/MBCguvv.png" alt="SJTweaks"></div><h1>Thank You for Your Purchase! 🎉</h1><p class="subtitle">Hello ${customerName || 'Gamer'},</p><p style="color:#ccc;text-align:center;">Your license key for <strong style="color:#00aeff;">${productName}</strong> is ready!</p><div class="license-box"><div class="license-label">Your License Key</div><div class="license-key">${licenseKey}</div></div><div class="instructions"><h3>📋 How to Activate</h3><ol><li>Download and install ${productName}</li><li>Launch the application</li><li>Enter your license key when prompted</li><li>Click "Activate License"</li><li>Enjoy your optimized gaming experience!</li></ol></div><p style="color:#888;text-align:center;margin-top:30px;"><strong>⚠️ Important:</strong> Keep this email safe.</p><div class="footer"><p>Need help? Reply to this email for support.</p><p>© ${new Date().getFullYear()} SJTweaks. All rights reserved.</p></div></div></body></html>`
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background-color:#0a0a0f;font-family:'Segoe UI',Roboto,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0a0f;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:linear-gradient(180deg,#0d1117 0%,#161b22 100%);border-radius:16px;border:1px solid #30363d;overflow:hidden;">
+          
+          <!-- Header -->
+          <tr>
+            <td style="padding:40px 40px 20px;text-align:center;border-bottom:1px solid #21262d;">
+              <img src="https://i.imgur.com/yQ9KK1I.png" alt="SJTweaks" style="width:120px;height:auto;margin-bottom:20px;">
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:600;">Thank You for Your Purchase!</h1>
+              <p style="margin:10px 0 0;color:#8b949e;font-size:16px;">Hello ${customerName || 'Gamer'}, your license is ready</p>
+            </td>
+          </tr>
+          
+          <!-- Product Name -->
+          <tr>
+            <td style="padding:30px 40px 10px;text-align:center;">
+              <p style="margin:0;color:#8b949e;font-size:14px;text-transform:uppercase;letter-spacing:1px;">Product</p>
+              <p style="margin:8px 0 0;color:#58a6ff;font-size:20px;font-weight:600;">${productName}</p>
+            </td>
+          </tr>
+          
+          <!-- License Key Box -->
+          <tr>
+            <td style="padding:20px 40px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#0d1117;border:2px solid #238636;border-radius:12px;">
+                <tr>
+                  <td style="padding:25px;text-align:center;">
+                    <p style="margin:0 0 10px;color:#8b949e;font-size:12px;text-transform:uppercase;letter-spacing:2px;">Your License Key</p>
+                    <p style="margin:0;color:#3fb950;font-size:22px;font-family:'Courier New',monospace;font-weight:bold;letter-spacing:1px;word-break:break-all;">${licenseKey}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Instructions -->
+          <tr>
+            <td style="padding:20px 40px 30px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#161b22;border-radius:10px;border:1px solid #21262d;">
+                <tr>
+                  <td style="padding:20px 25px;">
+                    <p style="margin:0 0 15px;color:#ffffff;font-size:16px;font-weight:600;">📋 How to Activate</p>
+                    <p style="margin:0 0 8px;color:#c9d1d9;font-size:14px;line-height:1.6;">1. Download and install ${productName}</p>
+                    <p style="margin:0 0 8px;color:#c9d1d9;font-size:14px;line-height:1.6;">2. Launch the application</p>
+                    <p style="margin:0 0 8px;color:#c9d1d9;font-size:14px;line-height:1.6;">3. Enter your license key when prompted</p>
+                    <p style="margin:0 0 8px;color:#c9d1d9;font-size:14px;line-height:1.6;">4. Click "Activate License"</p>
+                    <p style="margin:0;color:#c9d1d9;font-size:14px;line-height:1.6;">5. Enjoy your optimized gaming! 🎮</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 40px 30px;text-align:center;border-top:1px solid #21262d;">
+              <p style="margin:0 0 5px;color:#f85149;font-size:13px;">⚠️ Keep this email safe - your key is unique to your purchase</p>
+              <p style="margin:15px 0 0;color:#484f58;font-size:12px;">© ${new Date().getFullYear()} SJTweaks. All rights reserved.</p>
+              <p style="margin:5px 0 0;color:#484f58;font-size:12px;">Need help? Reply to this email</p>
+            </td>
+          </tr>
+          
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
     }, {
       headers: { 'Authorization': `Bearer ${CONFIG.RESEND_API_KEY}`, 'Content-Type': 'application/json' }
     });
