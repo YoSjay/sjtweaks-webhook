@@ -17,7 +17,7 @@ const CONFIG = {
 
 async function generateKeyAuthLicense(productConfig) {
   try {
-    const url = `https://keyauth.win/api/seller/?sellerkey=${CONFIG.KEYAUTH_SELLER_KEY}&type=add&expiry=${productConfig.expiry}&mask=XXXXXX-XXXXXX-XXXXXX-XXXXXX&level=${productConfig.level}&amount=1&format=json`;
+    const url = `https://keyauth.win/api/seller/?sellerkey=${CONFIG.KEYAUTH_SELLER_KEY}&type=add&expiry=${productConfig.expiry}&mask=******-******-******-******&level=${productConfig.level}&amount=1&format=json`;
     
     console.log('🔑 Calling KeyAuth API...');
     const response = await axios.get(url);
