@@ -1,0 +1,36 @@
+# ============================================
+# KEYAUTH CONFIGURATION
+# ============================================
+# Get your seller key from: https://keyauth.cc/app/?page=seller-settings
+KEYAUTH_SELLER_KEY=your_seller_key_here
+KEYAUTH_APP_NAME=SJTweaks Premium Utility
+
+# ============================================
+# EMAIL CONFIGURATION (Gmail Example)
+# ============================================
+# For Gmail, use an App Password (not your regular password)
+# Create one at: https://myaccount.google.com/apppasswords
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASS=your-app-password-here
+EMAIL_FROM=SJTweaks <your-email@gmail.com>
+
+# ============================================
+# PAYHIP (Optional)
+# ============================================
+PAYHIP_SECRET=your_payhip_webhook_secret
+
+# ============================================
+# SERVER
+# ============================================
+PORT=3000
+
+# ============================================
+# INSTRUCTIONS
+# ============================================
+# 1. Rename this file to ".env" (remove the .txt extension)
+# 2. Fill in your actual credentials
+# 3. Run: npm install
+# 4. Run: npm start
+
