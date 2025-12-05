@@ -10,7 +10,7 @@ const CONFIG = {
   KEYAUTH_SELLER_KEY: '7ca79466ef4f6b7533a645703827ec59',
   KEYAUTH_APP_NAME: 'SJTweaks Premium Utility',
   RESEND_API_KEY: 're_NxStYq9B_61JMyiaiSY8nvKKMCiVEMfMy',
-  EMAIL_FROM: 'SJTweaks <onboarding@resend.dev>',
+  EMAIL_FROM: 'SJTweaks <noreply@sjtweaks.com>',
   PRODUCTS: {
     '1LPB0': { keyauthApp: 'SJTweaks Premium Utility', expiry: 0, level: 1, mask: 'XXXXX-XXXXX-XXXXX-XXXXX' }
   }
