@@ -10,8 +10,6 @@ app.use(express.urlencoded({ extended: true }));
 const CONFIG = {
   KEYAUTH_SELLER_KEY: '7ca79466ef4f6b7533a645703827ec59',
   KEYAUTH_APP_NAME: 'SJTweaks Premium Utility',
-  EMAIL_HOST: 'smtp.gmail.com',
-  EMAIL_PORT: 465,
   EMAIL_USER: 'kickinitzwithadah@gmail.com',
   EMAIL_PASS: 'culbhumkmigyirpz',
   EMAIL_FROM: 'SJTweaks <kickinitzwithadah@gmail.com>',
@@ -21,7 +19,7 @@ const CONFIG = {
 };
 
 const transporter = nodemailer.createTransport({
-  host: CONFIG.EMAIL_HOST, port: CONFIG.EMAIL_PORT, secure: true,
+  service: 'gmail',
   auth: { user: CONFIG.EMAIL_USER, pass: CONFIG.EMAIL_PASS }
 });
 
@@ -58,43 +56,35 @@ async function sendLicenseEmail(email, customerName, licenseKey, productName) {
 
 app.post('/webhook/payhip', async (req, res) => {
   console.log('\n📦 Received Payhip webhook:', new Date().toISOString());
-  console.log('Body:', JSON.stringify(req.body, null, 2));
   try {
     const buyer_email = req.body.email;
     const items = req.body.items || [];
     const firstItem = items[0] || {};
     const product_key = firstItem.product_key;
-    const product_id = firstItem.product_id;
     const product_name = firstItem.product_name;
 
     if (!buyer_email) { return res.status(400).json({ error: 'Missing email' }); }
-    if (!product_key && !product_id) { return res.status(400).json({ error: 'Missing product info' }); }
 
     console.log(`🛒 New sale: ${product_name}`);
     console.log(`👤 Buyer: ${buyer_email}`);
     console.log(`🔑 Product Key: ${product_key}`);
 
-    let productConfig = CONFIG.PRODUCTS[product_key] || CONFIG.PRODUCTS[product_id];
-    if (!productConfig) {
-      productConfig = { keyauthApp: 'SJTweaks Premium Utility', expiry: 0, level: 1, mask: 'XXXXX-XXXXX-XXXXX-XXXXX' };
-    }
+    let productConfig = CONFIG.PRODUCTS[product_key] || { keyauthApp: 'SJTweaks Premium Utility', expiry: 0, level: 1, mask: 'XXXXX-XXXXX-XXXXX-XXXXX' };
 
     const licenseKey = await generateKeyAuthLicense(productConfig);
     if (!licenseKey) { return res.status(500).json({ error: 'Failed to generate license key' }); }
 
     await sendLicenseEmail(buyer_email, buyer_email.split('@')[0], licenseKey, product_name || productConfig.keyauthApp);
 
-    console.log('✅ Webhook processed successfully!\n');
+    console.log('✅ Done!\n');
     res.status(200).json({ success: true, key: licenseKey });
   } catch (error) { 
-    console.error('❌ Webhook error:', error); 
+    console.error('❌ Error:', error); 
     res.status(500).json({ error: 'Internal server error' }); 
   }
 });
 
-app.get('/test', (req, res) => {
-  res.json({ status: 'Server is running!', time: new Date().toISOString() });
-});
+app.get('/test', (req, res) => { res.json({ status: 'Running!' }); });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => { console.log(`🚀 Server running on port ${PORT}\n✅ KeyAuth configured\n✅ Email configured`); });
