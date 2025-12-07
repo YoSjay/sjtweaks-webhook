@@ -21,9 +21,22 @@ app.use((req, res, next) => {
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  // KeyAuth Seller API credentials
-  KEYAUTH_SELLER_KEY: process.env.KEYAUTH_SELLER_KEY || '7ca79466ef4f6b7533a645703827ec59',
+  // Default Owner ID (same for all apps)
   KEYAUTH_OWNER_ID: 'PW4I9Xr6uj',
+  
+  // ============================================
+  // KEYAUTH SELLER KEYS - ONE PER APPLICATION
+  // ============================================
+  KEYAUTH_SELLER_KEYS: {
+    'SJTweaks Zero Delay': 'd0bb617b0aa78707b268f8bcee9342e1',
+    'SJTweaks Zero Delay Plus': 'b72956aca77724e87c6984e90148bbfb',
+    'SJTweaks FPS Boost': '2c0389f365844ec214113404e70cd187',
+    'SJ Tweaks Ping Optimizer': '589f61c9d36cf6cad25a70b4075b4168',
+    'SJTweaks Premium Utility': '7ca79466ef4f6b7533a645703827ec59',
+    'SJTweaks Aim Bundle': 'ac48c7ba9b7b8ca80ce459872beb75c4',
+    'SJTweaks Shotgun Pack': '1cabbf0a85365846c8db08a3865a2aa8',
+    'SJTweaks Keyboard Macro': 'aa60a95bb0a0aa74ab08ffa78d2b4143'
+  },
   
   // Payhip webhook secret (optional)
   PAYHIP_SECRET: process.env.PAYHIP_SECRET || '',
@@ -39,12 +52,11 @@ const CONFIG = {
   ADMIN_KEY: process.env.ADMIN_KEY || 'sjtweaks_admin_2024',
   
   // ============================================
-  // KEYAUTH APPLICATIONS
+  // KEYAUTH APPLICATIONS (without Controller Macro)
   // ============================================
   KEYAUTH_APPS: {
     'ping-optimizer': { name: 'SJ Tweaks Ping Optimizer', version: '1.0' },
     'aim-bundle': { name: 'SJTweaks Aim Bundle', version: '1.0' },
-    'controller-macro': { name: 'SJTweaks Controller Macro', version: '1.0' },
     'fps-boost': { name: 'SJTweaks FPS Boost', version: '1.0' },
     'keyboard-macro': { name: 'SJTweaks Keyboard Macro', version: '1.0' },
     'premium-utility': { name: 'SJTweaks Premium Utility', version: '1.0' },
@@ -55,24 +67,22 @@ const CONFIG = {
 
   // ============================================
   // PRODUCTS THAT DO NOT REQUIRE LICENSE KEYS
-  // These are simple file downloads, no KeyAuth needed
   // ============================================
   NO_LICENSE_PRODUCTS: [
-    '0S1TA',  // PlayStation Zero Delay - https://sjtweaks.com/b/0S1TA
-    'TJEjb',  // SJ Macro (Controller) - https://sjtweaks.com/b/TJEjb
-    '1uqb8',  // Pickup Macro - https://sjtweaks.com/b/1uqb8
+    '0S1TA',  // PlayStation Zero Delay
+    'TJEjb',  // SJ Macro (Controller)
+    '1uqb8',  // Pickup Macro
   ],
   
   // ============================================
-  // PRODUCT MAPPING
-  // Map Payhip product keys to KeyAuth apps
+  // PRODUCT MAPPING - Payhip to KeyAuth
   // ============================================
   PRODUCTS: {
-    // === PC OPTIMIZERS (Require License Keys) ===
+    // === PC OPTIMIZERS ===
     'dFECZ': { 
       keyauthApp: 'SJTweaks Zero Delay',
       productName: 'Zero Delay (Quantum Delay Engine)',
-      expiry: 0, // lifetime
+      expiry: 0,
       level: 1,
       mask: '******-******-******-******'
     },
@@ -105,8 +115,7 @@ const CONFIG = {
       mask: '******-******-******-******'
     },
 
-    // === AIM PRODUCTS (Require License Keys) ===
-    // Shotgun Pack
+    // === AIM PRODUCTS ===
     'SHOTGUN_KEY': { 
       keyauthApp: 'SJTweaks Shotgun Pack',
       productName: 'Shotgun Pack (Aim Enhancer)',
@@ -114,7 +123,6 @@ const CONFIG = {
       level: 1,
       mask: '******-******-******-******'
     },
-    // Aim Bundle
     'AIMBUNDLE_KEY': { 
       keyauthApp: 'SJTweaks Aim Bundle',
       productName: 'Aim Bundle',
@@ -123,7 +131,7 @@ const CONFIG = {
       mask: '******-******-******-******'
     },
 
-    // === KEYBOARD MACRO (Requires License Key) ===
+    // === KEYBOARD MACRO ===
     'KEYBOARD_MACRO_KEY': { 
       keyauthApp: 'SJTweaks Keyboard Macro',
       productName: 'SJ Macro (Keyboard)',
@@ -175,13 +183,24 @@ const transporter = nodemailer.createTransport({
 
 // ============================================
 // KEYAUTH API - GENERATE LICENSE KEY
+// Uses the CORRECT seller key for each application
 // ============================================
 async function generateKeyAuthLicense(productConfig) {
   try {
     const url = 'https://keyauth.win/api/seller/';
     
+    // GET THE CORRECT SELLER KEY FOR THIS APPLICATION
+    const sellerKey = CONFIG.KEYAUTH_SELLER_KEYS[productConfig.keyauthApp];
+    
+    if (!sellerKey) {
+      console.error(`❌ No seller key found for app: ${productConfig.keyauthApp}`);
+      return null;
+    }
+    
+    console.log(`🔑 Using seller key for: ${productConfig.keyauthApp}`);
+    
     const params = new URLSearchParams({
-      sellerkey: CONFIG.KEYAUTH_SELLER_KEY,
+      sellerkey: sellerKey,
       type: 'add',
       format: 'json',
       expiry: productConfig.expiry.toString(),
@@ -195,7 +214,7 @@ async function generateKeyAuthLicense(productConfig) {
     
     if (response.data.success) {
       const key = response.data.key || (response.data.keys && response.data.keys[0]);
-      console.log('✅ Generated KeyAuth license:', key);
+      console.log(`✅ Generated KeyAuth license for ${productConfig.keyauthApp}: ${key}`);
       return key;
     } else {
       console.error('❌ KeyAuth error:', response.data.message);
@@ -393,22 +412,18 @@ app.post('/webhook/payhip', async (req, res) => {
     console.log(`🔑 Product Key: ${product_key}`);
     console.log(`💰 Price: $${price}`);
 
-    // ============================================
-    // CHECK IF PRODUCT REQUIRES LICENSE KEY
-    // ============================================
+    // Check if product requires license key
     const requiresLicense = !CONFIG.NO_LICENSE_PRODUCTS.includes(product_key);
     
     if (!requiresLicense) {
       console.log('📋 This product does NOT require a license key');
       
-      // Send thank you email only
       const emailSent = await sendThankYouEmail(
         buyer_email,
         buyer_email.split('@')[0],
         product_name
       );
 
-      // Save order without license key
       const orderRecord = {
         date: new Date().toISOString(),
         order_id,
@@ -431,9 +446,6 @@ app.post('/webhook/payhip', async (req, res) => {
       });
     }
 
-    // ============================================
-    // PRODUCT REQUIRES LICENSE KEY
-    // ============================================
     console.log('🔐 This product REQUIRES a license key');
 
     // Find product configuration
@@ -461,13 +473,12 @@ app.post('/webhook/payhip', async (req, res) => {
       };
     }
 
-    // Generate KeyAuth license
+    // Generate KeyAuth license using the CORRECT seller key
     const licenseKey = await generateKeyAuthLicense(productConfig);
     
     if (!licenseKey) {
       console.error('❌ Failed to generate license key');
       
-      // Save failed order
       const orderRecord = {
         date: new Date().toISOString(),
         order_id,
@@ -476,6 +487,7 @@ app.post('/webhook/payhip', async (req, res) => {
         product_key,
         price,
         license_key: null,
+        keyauth_app: productConfig.keyauthApp,
         requires_license: true,
         license_generated: false,
         email_sent: false,
@@ -504,6 +516,7 @@ app.post('/webhook/payhip', async (req, res) => {
       product_key,
       price,
       license_key: licenseKey,
+      keyauth_app: productConfig.keyauthApp,
       requires_license: true,
       license_generated: true,
       email_sent: emailSent
@@ -515,7 +528,8 @@ app.post('/webhook/payhip', async (req, res) => {
     res.status(200).json({ 
       success: true, 
       message: 'License key generated and email sent',
-      requires_license: true
+      requires_license: true,
+      keyauth_app: productConfig.keyauthApp
     });
 
   } catch (error) {
@@ -528,7 +542,6 @@ app.post('/webhook/payhip', async (req, res) => {
 // ADMIN API ENDPOINTS
 // ============================================
 
-// Get all orders
 app.get('/api/orders', (req, res) => {
   const authKey = req.headers.authorization;
   if (authKey !== CONFIG.ADMIN_KEY) {
@@ -537,7 +550,6 @@ app.get('/api/orders', (req, res) => {
   res.json({ success: true, orders });
 });
 
-// Get stats
 app.get('/api/stats', (req, res) => {
   const authKey = req.headers.authorization;
   if (authKey !== CONFIG.ADMIN_KEY) {
@@ -563,28 +575,14 @@ app.get('/test', async (req, res) => {
     status: 'Server is running!',
     time: new Date().toISOString(),
     config: {
-      emailConfigured: !!CONFIG.EMAIL_USER && CONFIG.EMAIL_USER !== 'your-email@gmail.com',
-      keyauthConfigured: !!CONFIG.KEYAUTH_SELLER_KEY && CONFIG.KEYAUTH_SELLER_KEY !== 'YOUR_SELLER_KEY_HERE',
+      emailConfigured: !!CONFIG.EMAIL_USER,
+      appsConfigured: Object.keys(CONFIG.KEYAUTH_SELLER_KEYS).length,
       productsConfigured: Object.keys(CONFIG.PRODUCTS).length,
       noLicenseProducts: CONFIG.NO_LICENSE_PRODUCTS.length
     }
   });
 });
 
-app.get('/test/generate', async (req, res) => {
-  const productConfig = {
-    keyauthApp: 'SJTweaks Premium Utility',
-    productName: 'Test Key',
-    expiry: 0,
-    level: 1,
-    mask: '******-******-******-******'
-  };
-  
-  const key = await generateKeyAuthLicense(productConfig);
-  res.json({ success: !!key, key });
-});
-
-// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', uptime: process.uptime() });
 });
@@ -596,33 +594,26 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
-║            SJTweaks License Webhook Server v2.0              ║
+║            SJTweaks License Webhook Server v2.1              ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  🚀 Server running on port ${PORT}                              ║
 ║  📍 Webhook URL: /webhook/payhip                             ║
 ║  🧪 Test URL: /test                                          ║
 ╚══════════════════════════════════════════════════════════════╝
 
-📋 Configuration:
-  ✅ KeyAuth Seller Key: ${CONFIG.KEYAUTH_SELLER_KEY.substring(0, 8)}...
-  ✅ Email: ${CONFIG.EMAIL_USER}
-  ✅ Products with License: ${Object.keys(CONFIG.PRODUCTS).length}
-  ✅ Products without License: ${CONFIG.NO_LICENSE_PRODUCTS.length}
+📱 KeyAuth Applications with Seller Keys:
+  ✅ SJTweaks Zero Delay
+  ✅ SJTweaks Zero Delay Plus
+  ✅ SJTweaks FPS Boost
+  ✅ SJ Tweaks Ping Optimizer
+  ✅ SJTweaks Premium Utility
+  ✅ SJTweaks Aim Bundle
+  ✅ SJTweaks Shotgun Pack
+  ✅ SJTweaks Keyboard Macro
 
-🔒 Products that DO NOT require license keys:
+🔒 Products WITHOUT license keys:
   • PlayStation Zero Delay (0S1TA)
   • SJ Macro Controller (TJEjb)
   • Pickup Macro (1uqb8)
-
-📱 KeyAuth Applications:
-  • SJ Tweaks Ping Optimizer
-  • SJTweaks Aim Bundle
-  • SJTweaks Controller Macro
-  • SJTweaks FPS Boost
-  • SJTweaks Keyboard Macro
-  • SJTweaks Premium Utility
-  • SJTweaks Shotgun Pack
-  • SJTweaks Zero Delay
-  • SJTweaks Zero Delay Plus
   `);
 });
