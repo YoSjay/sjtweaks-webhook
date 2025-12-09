@@ -176,13 +176,17 @@ function saveOrders() {
 // EMAIL TRANSPORTER
 // ============================================
 const transporter = nodemailer.createTransport({
-  host: CONFIG.EMAIL_HOST,
-  port: CONFIG.EMAIL_PORT,
-  secure: false,
+  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
   auth: {
     user: CONFIG.EMAIL_USER,
     pass: CONFIG.EMAIL_PASS
-  }
+  },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000
 });
 
 // ============================================
