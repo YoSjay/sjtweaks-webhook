@@ -328,14 +328,24 @@ async function sendLicenseEmail(email, customerName, licenseKey, productName) {
     `
   };
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log('✅ Email sent to:', email);
-    return true;
-  } catch (error) {
-    console.error('❌ Email error:', error.message);
-    return false;
+  // Try sending with retry
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      console.log(`📧 Sending email to ${email} (attempt ${attempt})...`);
+      await transporter.sendMail(mailOptions);
+      console.log('✅ Email sent to:', email);
+      return true;
+    } catch (error) {
+      console.error(`❌ Email error (attempt ${attempt}):`, error.message);
+      if (attempt === 2) {
+        console.error('Full error:', error);
+        return false;
+      }
+      // Wait 2 seconds before retry
+      await new Promise(r => setTimeout(r, 2000));
+    }
   }
+  return false;
 }
 
 // ============================================
@@ -398,14 +408,23 @@ async function sendThankYouEmail(email, customerName, productName) {
     `
   };
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log('✅ Thank you email sent to:', email);
-    return true;
-  } catch (error) {
-    console.error('❌ Email error:', error.message);
-    return false;
+  // Try sending with retry
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      console.log(`📧 Sending thank you email to ${email} (attempt ${attempt})...`);
+      await transporter.sendMail(mailOptions);
+      console.log('✅ Thank you email sent to:', email);
+      return true;
+    } catch (error) {
+      console.error(`❌ Email error (attempt ${attempt}):`, error.message);
+      if (attempt === 2) {
+        console.error('Full error:', error);
+        return false;
+      }
+      await new Promise(r => setTimeout(r, 2000));
+    }
   }
+  return false;
 }
 
 // ============================================
@@ -715,6 +734,29 @@ app.get('/test', async (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', uptime: process.uptime() });
+});
+
+// Test email endpoint
+app.get('/test-email', async (req, res) => {
+  const testEmail = req.query.email;
+  if (!testEmail) {
+    return res.json({ error: 'Provide ?email=your@email.com' });
+  }
+  
+  console.log('📧 Testing email to:', testEmail);
+  
+  try {
+    await transporter.sendMail({
+      from: CONFIG.EMAIL_FROM,
+      to: testEmail,
+      subject: '🧪 SJTweaks Email Test',
+      html: '<h1>Email Test Successful!</h1><p>Your email configuration is working.</p>'
+    });
+    res.json({ success: true, message: 'Email sent!' });
+  } catch (error) {
+    console.error('Email test error:', error);
+    res.json({ success: false, error: error.message, details: error.code });
+  }
 });
 
 app.get('/', (req, res) => {
