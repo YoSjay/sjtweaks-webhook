@@ -1,23 +1,19 @@
 require('dotenv').config();
-
 const express = require('express');
 const axios = require('axios');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Enable CORS for admin panel and Discord bot
+// Enable CORS for admin panel
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-api-key');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   next();
 });
 
@@ -55,9 +51,6 @@ const CONFIG = {
   // Admin key for API access
   ADMIN_KEY: process.env.ADMIN_KEY || 'sjtweaks_admin_2024',
   
-  // Discord bot API key
-  DISCORD_BOT_API_KEY: process.env.DISCORD_BOT_API_KEY || 'sjtweaks-discord-bot-2024',
-  
   // ============================================
   // KEYAUTH APPLICATIONS (without Controller Macro)
   // ============================================
@@ -77,8 +70,12 @@ const CONFIG = {
   // ============================================
   NO_LICENSE_PRODUCTS: [
     '0S1TA',  // PlayStation Zero Delay
-    'TJEjb',  // SJ Macro (Controller)
     '1uqb8',  // Pickup Macro
+  ],
+  
+  // Products that use Controller Macro license system (not KeyAuth)
+  CONTROLLER_MACRO_PRODUCTS: [
+    'TJEjb',  // SJ Macro (Controller)
   ],
   
   // ============================================
@@ -121,6 +118,7 @@ const CONFIG = {
       level: 1,
       mask: '******-******-******-******'
     },
+
     // === AIM PRODUCTS ===
     'SHOTGUN_KEY': { 
       keyauthApp: 'SJTweaks Shotgun Pack',
@@ -136,6 +134,7 @@ const CONFIG = {
       level: 1,
       mask: '******-******-******-******'
     },
+
     // === KEYBOARD MACRO ===
     'KEYBOARD_MACRO_KEY': { 
       keyauthApp: 'SJTweaks Keyboard Macro',
@@ -144,9 +143,10 @@ const CONFIG = {
       level: 1,
       mask: '******-******-******-******'
     },
+
     // === TESTING ===
     '1LPB0': { 
-      keyauthApp: 'SJTweaks Premium Utility',
+      keyauthApp: 'SJTweaks Premium Utility', 
       productName: 'Testing Product',
       expiry: 0,
       level: 1,
@@ -159,6 +159,10 @@ const CONFIG = {
 let orders = [];
 const ORDERS_FILE = path.join(__dirname, 'orders.json');
 
+// Controller Macro licenses storage (separate from KeyAuth)
+let controllerLicenses = [];
+const CONTROLLER_LICENSES_FILE = path.join(__dirname, 'controller-licenses.json');
+
 // Load existing orders
 try {
   if (fs.existsSync(ORDERS_FILE)) {
@@ -168,25 +172,41 @@ try {
   console.log('No existing orders file');
 }
 
+// Load existing controller licenses
+try {
+  if (fs.existsSync(CONTROLLER_LICENSES_FILE)) {
+    controllerLicenses = JSON.parse(fs.readFileSync(CONTROLLER_LICENSES_FILE, 'utf8'));
+  }
+} catch (e) {
+  console.log('No existing controller licenses file');
+}
+
 function saveOrders() {
   fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
+}
+
+function saveControllerLicenses() {
+  fs.writeFileSync(CONTROLLER_LICENSES_FILE, JSON.stringify(controllerLicenses, null, 2));
+}
+
+// Generate Controller Macro license key
+function generateControllerLicense() {
+  const randomPart1 = crypto.randomBytes(3).toString('hex').toUpperCase();
+  const randomPart2 = crypto.randomBytes(3).toString('hex').toUpperCase();
+  return `SJ-CM-${randomPart1}-${randomPart2}`;
 }
 
 // ============================================
 // EMAIL TRANSPORTER
 // ============================================
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
+  host: CONFIG.EMAIL_HOST,
+  port: CONFIG.EMAIL_PORT,
+  secure: false,
   auth: {
     user: CONFIG.EMAIL_USER,
     pass: CONFIG.EMAIL_PASS
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 15000
+  }
 });
 
 // ============================================
@@ -230,27 +250,6 @@ async function generateKeyAuthLicense(productConfig) {
     }
   } catch (error) {
     console.error('❌ KeyAuth API error:', error.message);
-    return null;
-  }
-}
-
-// ============================================
-// GET KEY INFO FROM KEYAUTH
-// ============================================
-async function getKeyInfoFromKeyAuth(licenseKey, keyauthApp) {
-  try {
-    const sellerKey = CONFIG.KEYAUTH_SELLER_KEYS[keyauthApp];
-    if (!sellerKey) return null;
-    
-    const url = `https://keyauth.win/api/seller/?sellerkey=${sellerKey}&type=info&key=${encodeURIComponent(licenseKey)}&format=json`;
-    const response = await axios.get(url, { timeout: 10000 });
-    
-    if (response.data.success) {
-      return response.data;
-    }
-    return null;
-  } catch (error) {
-    console.error('Error getting key info:', error.message);
     return null;
   }
 }
@@ -328,24 +327,14 @@ async function sendLicenseEmail(email, customerName, licenseKey, productName) {
     `
   };
 
-  // Try sending with retry
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      console.log(`📧 Sending email to ${email} (attempt ${attempt})...`);
-      await transporter.sendMail(mailOptions);
-      console.log('✅ Email sent to:', email);
-      return true;
-    } catch (error) {
-      console.error(`❌ Email error (attempt ${attempt}):`, error.message);
-      if (attempt === 2) {
-        console.error('Full error:', error);
-        return false;
-      }
-      // Wait 2 seconds before retry
-      await new Promise(r => setTimeout(r, 2000));
-    }
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log('✅ Email sent to:', email);
+    return true;
+  } catch (error) {
+    console.error('❌ Email error:', error.message);
+    return false;
   }
-  return false;
 }
 
 // ============================================
@@ -408,23 +397,14 @@ async function sendThankYouEmail(email, customerName, productName) {
     `
   };
 
-  // Try sending with retry
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      console.log(`📧 Sending thank you email to ${email} (attempt ${attempt})...`);
-      await transporter.sendMail(mailOptions);
-      console.log('✅ Thank you email sent to:', email);
-      return true;
-    } catch (error) {
-      console.error(`❌ Email error (attempt ${attempt}):`, error.message);
-      if (attempt === 2) {
-        console.error('Full error:', error);
-        return false;
-      }
-      await new Promise(r => setTimeout(r, 2000));
-    }
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log('✅ Thank you email sent to:', email);
+    return true;
+  } catch (error) {
+    console.error('❌ Email error:', error.message);
+    return false;
   }
-  return false;
 }
 
 // ============================================
@@ -460,6 +440,58 @@ app.post('/webhook/payhip', async (req, res) => {
     console.log(`🔑 Product Key: ${product_key}`);
     console.log(`💰 Price: $${price}`);
 
+    // Check if this is a Controller Macro product
+    if (CONFIG.CONTROLLER_MACRO_PRODUCTS.includes(product_key)) {
+      console.log('🎮 Controller Macro product - generating local license');
+      
+      const licenseKey = generateControllerLicense();
+      
+      // Save to controller licenses
+      controllerLicenses.push({
+        license_key: licenseKey,
+        email: buyer_email.toLowerCase(),
+        product_id: 'controller-macro',
+        product_name: 'SJTweaks Controller Macro',
+        order_id: order_id,
+        status: 'unused',
+        hwid: null,
+        created_at: new Date().toISOString(),
+        activated_at: null
+      });
+      saveControllerLicenses();
+      
+      // Send email with license key
+      const emailSent = await sendLicenseEmail(
+        buyer_email,
+        buyer_email.split('@')[0],
+        licenseKey,
+        'SJTweaks Controller Macro'
+      );
+      
+      // Save order
+      const orderRecord = {
+        date: new Date().toISOString(),
+        order_id,
+        email: buyer_email,
+        product: product_name,
+        product_key,
+        price,
+        license_key: licenseKey,
+        keyauth_app: 'Controller Macro (Local)',
+        requires_license: true,
+        license_generated: true,
+        email_sent: emailSent
+      };
+      orders.unshift(orderRecord);
+      saveOrders();
+      
+      console.log(`✅ Controller Macro license generated: ${licenseKey}`);
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Controller Macro license generated and email sent'
+      });
+    }
+
     // Check if product requires license key
     const requiresLicense = !CONFIG.NO_LICENSE_PRODUCTS.includes(product_key);
     
@@ -483,7 +515,6 @@ app.post('/webhook/payhip', async (req, res) => {
         requires_license: false,
         email_sent: emailSent
       };
-
       orders.unshift(orderRecord);
       saveOrders();
 
@@ -542,7 +573,6 @@ app.post('/webhook/payhip', async (req, res) => {
         email_sent: false,
         error: 'Failed to generate license key'
       };
-
       orders.unshift(orderRecord);
       saveOrders();
       
@@ -571,12 +601,10 @@ app.post('/webhook/payhip', async (req, res) => {
       license_generated: true,
       email_sent: emailSent
     };
-
     orders.unshift(orderRecord);
     saveOrders();
 
     console.log('✅ Webhook processed successfully!\n');
-
     res.status(200).json({ 
       success: true, 
       message: 'License key generated and email sent',
@@ -591,104 +619,9 @@ app.post('/webhook/payhip', async (req, res) => {
 });
 
 // ============================================
-// DISCORD BOT API - GET LICENSES BY EMAIL
-// ============================================
-app.get('/api/licenses/email/:email', async (req, res) => {
-  try {
-    const searchEmail = req.params.email.toLowerCase().trim();
-    
-    // Find all orders with this email that have license keys
-    const customerOrders = orders.filter(order => 
-      order.email && 
-      order.email.toLowerCase() === searchEmail && 
-      order.license_key
-    );
-    
-    // Build response with license info
-    const licenses = [];
-    
-    for (const order of customerOrders) {
-      // Get live status from KeyAuth
-      let keyStatus = 'unknown';
-      let expiresAt = null;
-      let usedBy = null;
-      
-      if (order.keyauth_app) {
-        const keyInfo = await getKeyInfoFromKeyAuth(order.license_key, order.keyauth_app);
-        if (keyInfo) {
-          keyStatus = keyInfo.banned ? 'banned' : (keyInfo.used || keyInfo.usedon) ? 'used' : 'unused';
-          expiresAt = keyInfo.expires || keyInfo.expiry;
-          usedBy = keyInfo.usedby || keyInfo.user;
-        }
-      }
-      
-      licenses.push({
-        licenseKey: order.license_key,
-        productId: order.product_key,
-        productName: order.product || order.keyauth_app,
-        keyauthApp: order.keyauth_app,
-        purchaseDate: order.date,
-        orderId: order.order_id,
-        status: keyStatus,
-        expiresAt: expiresAt,
-        usedBy: usedBy
-      });
-    }
-    
-    res.json({
-      success: true,
-      email: searchEmail,
-      count: licenses.length,
-      licenses
-    });
-    
-  } catch (error) {
-    console.error('Error fetching licenses by email:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Search licenses (partial match)
-app.get('/api/licenses/search', async (req, res) => {
-  try {
-    const { email, key } = req.query;
-    
-    let results = orders.filter(o => o.license_key);
-    
-    if (email) {
-      const searchEmail = email.toLowerCase().trim();
-      results = results.filter(o => o.email && o.email.toLowerCase().includes(searchEmail));
-    }
-    
-    if (key) {
-      const searchKey = key.toLowerCase().trim();
-      results = results.filter(o => o.license_key.toLowerCase().includes(searchKey));
-    }
-    
-    const licenses = results.map(order => ({
-      licenseKey: order.license_key,
-      email: order.email,
-      productName: order.product || order.keyauth_app,
-      keyauthApp: order.keyauth_app,
-      purchaseDate: order.date,
-      orderId: order.order_id
-    }));
-    
-    res.json({
-      success: true,
-      count: licenses.length,
-      licenses
-    });
-    
-  } catch (error) {
-    console.error('Error searching licenses:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// ============================================
 // ADMIN API ENDPOINTS
 // ============================================
+
 app.get('/api/orders', (req, res) => {
   const authKey = req.headers.authorization;
   if (authKey !== CONFIG.ADMIN_KEY) {
@@ -708,11 +641,102 @@ app.get('/api/stats', (req, res) => {
     ordersWithLicense: orders.filter(o => o.requires_license && o.license_generated).length,
     ordersWithoutLicense: orders.filter(o => !o.requires_license).length,
     emailsSent: orders.filter(o => o.email_sent).length,
-    emailsFailed: orders.filter(o => !o.email_sent).length,
-    uniqueCustomers: [...new Set(orders.map(o => o.email))].length
+    emailsFailed: orders.filter(o => !o.email_sent).length
   };
   
   res.json({ success: true, stats });
+});
+
+// ============================================
+// CONTROLLER MACRO LICENSE ENDPOINTS
+// ============================================
+
+// Admin: Generate controller macro license
+app.post('/api/admin/generate', (req, res) => {
+  const authKey = req.headers.authorization;
+  if (authKey !== CONFIG.ADMIN_KEY) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  
+  const { product_id, email } = req.body;
+  
+  if (product_id !== 'controller-macro') {
+    return res.status(400).json({ success: false, error: 'This endpoint only supports controller-macro' });
+  }
+  
+  const licenseKey = generateControllerLicense();
+  
+  const license = {
+    license_key: licenseKey,
+    email: email?.toLowerCase() || null,
+    product_id: 'controller-macro',
+    product_name: 'SJTweaks Controller Macro',
+    status: 'unused',
+    hwid: null,
+    created_at: new Date().toISOString(),
+    activated_at: null
+  };
+  
+  controllerLicenses.push(license);
+  saveControllerLicenses();
+  
+  console.log(`🔑 Admin generated controller key: ${licenseKey}${email ? ` for ${email}` : ''}`);
+  
+  res.json({
+    success: true,
+    license_key: licenseKey,
+    product_id: 'controller-macro',
+    product_name: 'SJTweaks Controller Macro',
+    email: email || null
+  });
+});
+
+// Validate controller macro license
+app.post('/api/validate', (req, res) => {
+  const { license_key, hwid, product_id } = req.body;
+  
+  if (!license_key) {
+    return res.status(400).json({ valid: false, message: 'License key required' });
+  }
+  
+  // Find the license
+  const license = controllerLicenses.find(l => l.license_key === license_key.toUpperCase());
+  
+  if (!license) {
+    return res.json({ valid: false, message: 'Invalid license key' });
+  }
+  
+  if (license.status === 'banned') {
+    return res.json({ valid: false, message: 'License key is banned' });
+  }
+  
+  // Check HWID binding
+  if (license.hwid && hwid && license.hwid !== hwid) {
+    return res.json({ valid: false, message: 'License is bound to another device' });
+  }
+  
+  // Bind HWID if not already bound
+  if (!license.hwid && hwid) {
+    license.hwid = hwid;
+    license.status = 'used';
+    license.activated_at = new Date().toISOString();
+    saveControllerLicenses();
+  }
+  
+  res.json({ 
+    valid: true, 
+    message: 'License valid',
+    product_name: license.product_name
+  });
+});
+
+// Get all controller licenses (admin)
+app.get('/api/controller-licenses', (req, res) => {
+  const authKey = req.headers.authorization;
+  if (authKey !== CONFIG.ADMIN_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  res.json({ success: true, licenses: controllerLicenses });
 });
 
 // ============================================
@@ -726,53 +750,13 @@ app.get('/test', async (req, res) => {
       emailConfigured: !!CONFIG.EMAIL_USER,
       appsConfigured: Object.keys(CONFIG.KEYAUTH_SELLER_KEYS).length,
       productsConfigured: Object.keys(CONFIG.PRODUCTS).length,
-      noLicenseProducts: CONFIG.NO_LICENSE_PRODUCTS.length,
-      totalOrders: orders.length
+      noLicenseProducts: CONFIG.NO_LICENSE_PRODUCTS.length
     }
   });
 });
 
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', uptime: process.uptime() });
-});
-
-// Test email endpoint
-app.get('/test-email', async (req, res) => {
-  const testEmail = req.query.email;
-  if (!testEmail) {
-    return res.json({ error: 'Provide ?email=your@email.com' });
-  }
-  
-  console.log('📧 Testing email to:', testEmail);
-  
-  try {
-    await transporter.sendMail({
-      from: CONFIG.EMAIL_FROM,
-      to: testEmail,
-      subject: '🧪 SJTweaks Email Test',
-      html: '<h1>Email Test Successful!</h1><p>Your email configuration is working.</p>'
-    });
-    res.json({ success: true, message: 'Email sent!' });
-  } catch (error) {
-    console.error('Email test error:', error);
-    res.json({ success: false, error: error.message, details: error.code });
-  }
-});
-
-app.get('/', (req, res) => {
-  res.json({ 
-    service: 'SJTweaks License Webhook Server',
-    version: '2.2',
-    endpoints: {
-      webhook: 'POST /webhook/payhip',
-      licensesByEmail: 'GET /api/licenses/email/:email',
-      searchLicenses: 'GET /api/licenses/search?email=&key=',
-      orders: 'GET /api/orders (requires auth)',
-      stats: 'GET /api/stats (requires auth)',
-      test: 'GET /test',
-      health: 'GET /health'
-    }
-  });
 });
 
 // ============================================
@@ -782,11 +766,10 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
-║            SJTweaks License Webhook Server v2.2              ║
+║            SJTweaks License Webhook Server v2.1              ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  🚀 Server running on port ${PORT}                              ║
 ║  📍 Webhook URL: /webhook/payhip                             ║
-║  🔍 License Lookup: /api/licenses/email/:email               ║
 ║  🧪 Test URL: /test                                          ║
 ╚══════════════════════════════════════════════════════════════╝
 
@@ -804,8 +787,5 @@ app.listen(PORT, () => {
   • PlayStation Zero Delay (0S1TA)
   • SJ Macro Controller (TJEjb)
   • Pickup Macro (1uqb8)
-
-📊 Loaded ${orders.length} existing orders
   `);
 });
-
