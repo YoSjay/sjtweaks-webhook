@@ -10,10 +10,16 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Enable CORS for admin panel
+// Enable CORS for admin panel and Electron apps
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // Handle preflight OPTIONS requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
   next();
 });
 
@@ -691,6 +697,16 @@ app.post('/api/admin/generate', (req, res) => {
   });
 });
 
+// Test validate via GET (for debugging)
+app.get('/api/validate-test/:key', (req, res) => {
+  const license_key = req.params.key;
+  const license = controllerLicenses.find(l => l.license_key === license_key.toUpperCase());
+  if (!license) {
+    return res.json({ valid: false, message: 'Invalid license key' });
+  }
+  res.json({ valid: true, message: 'License valid', product_name: license.product_name });
+});
+
 // Validate controller macro license
 app.post('/api/validate', (req, res) => {
   const { license_key, hwid, product_id } = req.body;
@@ -789,5 +805,6 @@ app.listen(PORT, () => {
   • Pickup Macro (1uqb8)
   `);
 });
-/ /   D e p l o y e d :   2 0 2 6 - 0 4 - 0 6   1 1 : 0 5 : 0 1  
+/ /   D e p l o y e d :   2 0 2 6 - 0 4 - 0 6   1 1 : 0 5 : 0 1 
+ 
  
